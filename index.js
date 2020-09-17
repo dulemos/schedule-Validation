@@ -1,5 +1,22 @@
-const scheduleValidation = async (acceptedSchedules, scheduleToCheck) => {
+const fetch = require('node-fetch');
+require('dotenv').config()
+
+
+const scheduleValidation = async (acceptedSchedules, scheduleToCheck) => { 
+
+    // adiciona o tempo de rota
+    await acceptedSchedules.forEach(schedule => {
+        getRouteDuration(schedule.location, scheduleToCheck.location)
+          .then(time => {
+              schedule.date = new Date(schedule.date.getTime() - time.value * 1000)
+              schedule.serviceTime = schedule.serviceTime + Math.floor(time.value / 60) * 2
+          })
+    })
+  
+  // Gera o array de datas disponíveis
   const allHours = await makeHoursArr(scheduleToCheck);
+
+  // Valida quais datas estão disponíveis  
   allHours.forEach(hour => {
       if(hour.isAvaible){
           acceptedSchedules.forEach(schedule => {
@@ -11,8 +28,17 @@ const scheduleValidation = async (acceptedSchedules, scheduleToCheck) => {
       }
   })
 
-  console.log(allHours)
+  //Retorna array de datas disponíveis    
+  const hours = allHours.map(hour => {
+      if(hour.isAvaible) return `${hour.date.getUTCHours()}:${(hour.date.getUTCMinutes() < 10 ? '0' : '') + hour.date.getUTCMinutes()}`
+  }).filter(hour => hour);
   
+
+  return {
+      "canAccept": hours.length > 0,
+      "hours": hours
+  }
+
 };
 
 const makeHoursArr = (scheduleToCheck) => {
@@ -27,6 +53,15 @@ const makeHoursArr = (scheduleToCheck) => {
   }
   return arr;
 };
+
+const getRouteDuration = async (origin, destination) => {
+    // console.log(origin.lat, destination)
+    const url = `https://maps.googleapis.com/maps/api/directions/json?origin=${origin.lat},${origin.lng}&destination=${destination.lat},${destination.lng}&key=${process.env.API_KEY}`
+    return await fetch(url)
+        .then(res => res.json())
+        .then(res => res.routes[0].legs[0].duration)
+
+}
 
 const inBetween = (serviceStart, serviceEnd, hour) =>
   serviceStart <= hour && serviceEnd >= hour;
@@ -75,31 +110,10 @@ const scheduleToCheck = {
     lng: -46.578069
 }
 };
-scheduleValidation(acceptedSchedules, scheduleToCheck);
 
-// TODO:
-// 1- verificar se data e horário estão compatíveis
-// 1.1- somar data aceita com tempo de serviço (inicio e fim)
-// se meu horario inicial tiver entre algum horario final e inicial aceito ou meu horario final tiver entre
-// meu horario inicial e final aceito ==== indisponível
+async function main() {
+    const res = await scheduleValidation(acceptedSchedules, scheduleToCheck);
+    console.log(res);
+}
 
-// acceptedSchedules:
-// [{
-//     "date": Date,
-//     "serviceTime": Int,
-//     "location": {
-//       lat: Double,
-//       lng: Double
-//     }
-// }]
-
-// scheduleToCheck:
-// {
-//     "dateRangeStart": Date,
-//     "dateRangeEnd": Date,
-//     "serviceTime": Int,
-//     "location": {
-//         lat: Double,
-//         lng: Double
-//     }
-// }
+main();
